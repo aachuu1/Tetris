@@ -3,6 +3,7 @@
 #include <time.h>    
 #include <unistd.h>
 #include <ncurses.h>
+#include <errno.h>
 
 // dimensiunile tablei de joc
 #define latime 10
@@ -11,7 +12,6 @@
 //matricea cu toate piesele tetris in toate rotatiile lor
 //[tip piesa][rotatie][rand][coloana]
 int piese[7][4][4][4] = {
-
     // 0 - I 
     {
         {
@@ -39,7 +39,6 @@ int piese[7][4][4][4] = {
             {0,1,0,0}
         }
     },
-
     // 1 - O 
     {
         {
@@ -67,7 +66,6 @@ int piese[7][4][4][4] = {
             {0,0,0,0}
         }
     },
-
     // 2 - T
     {
         {
@@ -95,7 +93,6 @@ int piese[7][4][4][4] = {
             {0,0,0,0}
         }
     },
-
     // 3 - S 
     {
         {
@@ -123,7 +120,6 @@ int piese[7][4][4][4] = {
             {0,0,0,0}
         }
     },
-
     // 4 - Z 
     {
         {
@@ -151,7 +147,6 @@ int piese[7][4][4][4] = {
             {0,0,0,0}
         }
     },
-
     // 5 - J 
     {
         {
@@ -179,7 +174,6 @@ int piese[7][4][4][4] = {
             {0,0,0,0}
         }
     },
-
     // 6 - L 
     {
         {
@@ -211,10 +205,43 @@ int piese[7][4][4][4] = {
 
 //structura care descrie o piesa curenta
 typedef struct{
-  int tip;       //tipul piesei 
-  int rotatie;   //rotatia curenta 
-  int x, y;      //pozitia pe tabla
+  int tip;       
+  int rotatie;   
+  int x, y;      
 } Piesa;
+
+//functie pentru alocarea tablei de joc
+int** alocareTabla(int h, int l){
+    int** tabla = (int**)malloc(h * sizeof(int*));
+    if(tabla == NULL){
+        perror("Eroare la alocarea memoriei pentru tabla");
+        return NULL;
+    }
+    
+    for(int i = 0; i < h; i++){
+        tabla[i] = (int*)calloc(l, sizeof(int));
+        if(tabla[i] == NULL){
+            perror("Eroare la alocarea memoriei pentru rand");
+            //dezaloca ce s-a alocat deja
+            for(int j = 0; j < i; j++){
+                free(tabla[j]);
+            }
+            free(tabla);
+            return NULL;
+        }
+    }
+    return tabla;
+}
+
+//functie pentru dezalocarea tablei
+void dezalocareTabla(int** tabla, int h){
+    if(tabla == NULL) return;
+    
+    for(int i = 0; i < h; i++){
+        free(tabla[i]);
+    }
+    free(tabla);
+}
 
 //muta piesa in jos cu o pozitie
 void deplasareJos(Piesa *p){
@@ -237,17 +264,13 @@ void rotire(Piesa *p){
 }
 
 //verifica daca piesa se suprapune cu tabla sau iese din margini
-//returneaza 1 daca exista coliziune, 0 altfel
-int coliziuneCuTabla(Piesa p, int tabla[inaltime][latime]){
+int coliziuneCuTabla(Piesa p, int** tabla){
     for(int i=0;i<4;i++){
         for(int j=0;j<4;j++){
-            //verifica fiecare bloc ocupat din piesa
             if(piese[p.tip][p.rotatie][i][j]){
                 int y = p.y + i;
                 int x = p.x + j;
-                //verifica daca iese din margini
                 if(x<0 || x>=latime || y>=inaltime) return 1;
-                //verifica daca se suprapune cu un bloc deja fixat
                 if(y >= 0 && tabla[y][x]) return 1;
             }
         }
@@ -255,8 +278,8 @@ int coliziuneCuTabla(Piesa p, int tabla[inaltime][latime]){
     return 0;
 }
 
-//fixeaza piesa pe tabla (cand nu mai poate cadea)
-void fixarePiesa(Piesa p, int tabla[inaltime][latime]){
+//fixeaza piesa pe tabla
+void fixarePiesa(Piesa p, int** tabla){
     for(int i=0;i<4;i++){
         for(int j=0;j<4;j++){
             if(piese[p.tip][p.rotatie][i][j]){
@@ -267,9 +290,8 @@ void fixarePiesa(Piesa p, int tabla[inaltime][latime]){
 }
 
 //sterge liniile complete si actualizeaza scorul
-void stergeLinii(int tabla[inaltime][latime], int *scor){
+void stergeLinii(int** tabla, int *scor){
     for(int i=inaltime-1;i>=0;i--){
-        //verifica daca linia este completa
         int full = 1;
         for(int j=0;j<latime;j++){
             if(tabla[i][j]==0){
@@ -277,7 +299,6 @@ void stergeLinii(int tabla[inaltime][latime], int *scor){
                 break;
             }
         }
-        //daca linia e completa, o sterge si coboara tot ce e deasupra
         if(full){
             (*scor)++;
             //muta toate liniile de deasupra in jos
@@ -288,19 +309,17 @@ void stergeLinii(int tabla[inaltime][latime], int *scor){
             }
             //goleste prima linie
             for(int j=0;j<latime;j++) tabla[0][j]=0;
-            i++; //verifica din nou aceeasi linie (acum contine linia de deasupra)
+            i++;
         }
     }
 }
 
-//deseneaza tabla de joc, piesa curenta si informatii
-void afisare(int tabla[inaltime][latime], Piesa p, int scor){
+//deseneaza tabla de joc
+void afisare(int** tabla, Piesa p, int scor){
     clear();
-    //deseneaza fiecare celula din tabla
     for(int i=0;i<inaltime;i++){
         for(int j=0;j<latime;j++){
             int bloc = tabla[i][j];
-            //verifica daca piesa curenta ocupa aceasta pozitie
             for(int ii=0;ii<4;ii++){
                 for(int jj=0;jj<4;jj++){
                     if(piese[p.tip][p.rotatie][ii][jj]){
@@ -309,12 +328,10 @@ void afisare(int tabla[inaltime][latime], Piesa p, int scor){
                     }
                 }
             }
-            //deseneaza '#' pentru bloc ocupat, '.' pentru gol
             mvaddch(i, j, bloc ? '#' : '.');
         }
     }
 
-    //afiseaza scorul si controalele in dreapta tablei
     mvprintw(0, latime+2, "Scor: %d", scor);
     mvprintw(2, latime+2, "Controale:");
     mvprintw(3, latime+2, "A/D - Stanga/Dreapta");
@@ -325,11 +342,19 @@ void afisare(int tabla[inaltime][latime], Piesa p, int scor){
     refresh();
 }
 
+//functie pentru alocarea unei noi piese
+Piesa* alocaPiesa(){
+    Piesa* p = (Piesa*)malloc(sizeof(Piesa));
+    if(p == NULL){
+        perror("Eroare la alocarea memoriei pentru piesa");
+        return NULL;
+    }
+    return p;
+}
+
 int main(){
-    //initializeaza generatorul de numere aleatoare
     srand(time(NULL));
 
-    //initializeaza ncurses
     initscr();
     cbreak();
     noecho();
@@ -337,86 +362,96 @@ int main(){
     nodelay(stdscr, TRUE);  
     curs_set(0);            
 
-    //initializeaza tabla goala
-    int tabla[inaltime][latime] = {0};
-    int scor = 0;
+    //aloca memoria pentru tabla
+    int** tabla = alocareTabla(inaltime, latime);
+    if(tabla == NULL){
+        endwin();
+        fprintf(stderr, "Nu s-a putut aloca memoria pentru tabla de joc\n");
+        return 1;
+    }
 
-    //creeaza prima piesa aleatoare
-    Piesa p;
-    p.tip = rand() % 7;
-    p.rotatie = 0;
-    p.x = latime/2 - 2;
-    p.y = 0;
+    int* scor = (int*)malloc(sizeof(int));
+    if(scor == NULL){
+        perror("Eroare la alocarea memoriei pentru scor");
+        dezalocareTabla(tabla, inaltime);
+        endwin();
+        return 1;
+    }
+    *scor = 0;
+
+    //aloca prima piesa
+    Piesa* p = alocaPiesa();
+    if(p == NULL){
+        free(scor);
+        dezalocareTabla(tabla, inaltime);
+        endwin();
+        return 1;
+    }
+    
+    p->tip = rand() % 7;
+    p->rotatie = 0;
+    p->x = latime/2 - 2;
+    p->y = 0;
 
     int counter = 0;
-    int viteza = 5; //cat de repede cade piesa 
+    int viteza = 5;
 
-    //bucla principala a jocului
+    //bucla principala
     while(1){
-        afisare(tabla, p, scor);
+        afisare(tabla, *p, *scor);
 
-        //citeste input-ul jucatorului
         int ch = getch();
-        Piesa temp = p;
+        Piesa temp = *p;
         
-        //miscare la stanga
         if(ch == 'a' || ch == 'A' || ch == KEY_LEFT){
             deplasareStanga(&temp);
             if(!coliziuneCuTabla(temp, tabla)){
-                p = temp;
+                *p = temp;
             }
         }
-        //miscare la dreapta
         else if(ch == 'd' || ch == 'D' || ch == KEY_RIGHT){
             deplasareDreapta(&temp);
             if(!coliziuneCuTabla(temp, tabla)){
-                p = temp;
+                *p = temp;
             }
         }
-        //rotire
         else if(ch == 'w' || ch == 'W' || ch == KEY_UP){
             rotire(&temp);
             if(!coliziuneCuTabla(temp, tabla)){
-                p = temp;
+                *p = temp;
             }
         }
-        //miscare rapida in jos
         else if(ch == 's' || ch == 'S' || ch == KEY_DOWN){
             deplasareJos(&temp);
             if(!coliziuneCuTabla(temp, tabla)){
-                p = temp;
+                *p = temp;
             }
         }
-        //iesire din joc
         else if(ch == 'q' || ch == 'Q'){
             break;
         }
 
-        //gravitate automata - piesa cade in jos periodic
         counter++;
         if(counter >= viteza){
             counter = 0;
-            temp = p;
+            temp = *p;
             temp.y++;
 
-            //incearca sa coboare piesa
             if(!coliziuneCuTabla(temp, tabla)){
-                p = temp;
+                *p = temp;
             } else {
-                //piesa a atins fundul sau o alta piesa
-                fixarePiesa(p, tabla);
-                stergeLinii(tabla, &scor);
+                fixarePiesa(*p, tabla);
+                stergeLinii(tabla, scor);
 
-                //genereaza o noua piesa
-                p.tip = rand() % 7;
-                p.rotatie = 0;
-                p.x = latime/2 - 2;
-                p.y = 0;
+                //genereaza noua piesa
+                p->tip = rand() % 7;
+                p->rotatie = 0;
+                p->x = latime/2 - 2;
+                p->y = 0;
 
-                //verifica daca noua piesa se suprapune cu tabla (game over)
-                if(coliziuneCuTabla(p, tabla)){
+                if(coliziuneCuTabla(*p, tabla)){
                     mvprintw(7, latime+2, "Jocul s a terminat");
-                    mvprintw(8, latime/2, "Scor: %d", scor);
+                    mvprintw(8, latime+2, "Scor: %d", *scor);
                     refresh();
                     napms(3000);
                     break;
@@ -424,11 +459,14 @@ int main(){
             }
         }
         
-        //delay intre frame-uri (50ms)
         napms(50);
     }
 
-    //curata ncurses
+    //curata memoria
+    free(p);
+    free(scor);
+    dezalocareTabla(tabla, inaltime);
     endwin();
+    
     return 0;
 }
